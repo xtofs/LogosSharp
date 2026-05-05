@@ -21,7 +21,7 @@ ref struct Tokenizer(ReadOnlySpan<char> src)
 
         int start = _pos;
 
-        Console.WriteLine($"checking `{_src[_pos..]}` at position {_pos}");
+        Console.WriteLine($"        checking `{_src[_pos..]}` at position {_pos}");
 
         // Literal tokens
         if (Match.Let(_src, ref _pos))
@@ -34,8 +34,8 @@ ref struct Tokenizer(ReadOnlySpan<char> src)
             return new Token(TokenKind.Plus, _src.Slice(start, _pos - start));
 
         // Regex tokens
-        if (Match.Ident(_src, ref _pos))
-            return new Token(TokenKind.Ident, _src.Slice(start, _pos - start));
+        if (Match.Identifier(_src, ref _pos))
+            return new Token(TokenKind.Identifier, _src.Slice(start, _pos - start));
 
         if (Match.Number(_src, ref _pos))
             return new Token(TokenKind.Number, _src.Slice(start, _pos - start));

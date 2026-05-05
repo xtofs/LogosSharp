@@ -63,111 +63,170 @@ static partial class Compiler
 
     private static void CompileRegexPattern(string name, string value, IndentedTextWriter writer)
     {
-        int uniqueId = 0;
-
         var pattern = RegexPattern.Parse(value);
-        writer.WriteLine($"//!! {pattern}   ");
+        writer.WriteLine($"// Regex AST: {pattern}");
 
         writer.WriteMultiline($$"""
             public static bool {{name}}(ReadOnlySpan<char> src, ref int i)
             {
+                var pos = i;
             """);
         writer.Indent++;
 
         foreach (var rep in pattern.Sequence)
         {
-            CompileRepetion(rep, ref uniqueId, writer);
+            CompileRepetition(rep, writer);
         }
 
-        writer.WriteLine("return false;");
+        writer.WriteLine("i = pos;");
+        writer.WriteLine("return true;");
         writer.Indent--;
         writer.WriteLine("}");
     }
 
-    private static void CompileRepetion(Repetition rep, ref int unique, IndentedTextWriter writer)
+    private static void CompileRepetition(Repetition rep, IndentedTextWriter writer)
     {
-        var atomName = CompileAtom(rep.Atom, ref unique, writer);
-
         writer.WriteLine();
-        writer.Indent++;
-        writer.WriteLine($"// Repetition: {rep.Min} .. {(rep.Max.HasValue ? rep.Max.Value.ToString() : "∞")} {rep.Atom} ");
+        writer.WriteLine($"// Repetition: {rep.Min}..{(rep.Max.HasValue ? rep.Max.Value.ToString() : "inf")} {rep.Atom}");
+        var atomCondition = BuildAtomCondition(rep.Atom, "src[pos]");
 
         if (rep.Min == 1 && rep.Max == 1)
         {
-            writer.WriteLine($"if ({atomName}(src[i])) {{");
-            writer.WriteLine("  i += 1;");
-            writer.WriteLine("  return true;");
+            writer.WriteLine($"if (!(pos < src.Length && ({atomCondition})))");
+            writer.WriteLine("{");
+            writer.Indent++;
+            EmitFailure(writer);
+            writer.Indent--;
+            writer.WriteLine("}");
+            writer.WriteLine("pos += 1;");
+            return;
+        }
+
+        if (rep.Min == 0 && rep.Max == 1)
+        {
+            writer.WriteLine($"if (pos < src.Length && ({atomCondition}))");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("pos += 1;");
+            writer.Indent--;
+            writer.WriteLine("}");
+            return;
+        }
+
+        if (rep.Min == 0 && rep.Max is null)
+        {
+            writer.WriteLine($"while (pos < src.Length && ({atomCondition}))");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("pos += 1;");
+            writer.Indent--;
+            writer.WriteLine("}");
+            return;
+        }
+
+        if (rep.Min == 1 && rep.Max is null)
+        {
+            writer.WriteLine($"if (!(pos < src.Length && ({atomCondition})))");
+            writer.WriteLine("{");
+            writer.Indent++;
+            EmitFailure(writer);
+            writer.Indent--;
+            writer.WriteLine("}");
+            writer.WriteLine("pos += 1;");
+            writer.WriteLine($"while (pos < src.Length && ({atomCondition}))");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("pos += 1;");
+            writer.Indent--;
+            writer.WriteLine("}");
+            return;
+        }
+
+        if (rep.Max is int max)
+        {
+            writer.WriteLine("var count = 0;");
+            writer.WriteLine($"while (count < {max} && pos < src.Length && ({atomCondition}))");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("pos += 1;");
+            writer.WriteLine("count += 1;");
+            writer.Indent--;
+            writer.WriteLine("}");
+            writer.WriteLine($"if (count < {rep.Min})");
+            writer.WriteLine("{");
+            writer.Indent++;
+            EmitFailure(writer);
+            writer.Indent--;
             writer.WriteLine("}");
         }
         else
         {
-            var check = $"n is >= {rep.Min}{(rep.Max.HasValue ? $" and <= {rep.Max.Value}" : "")}";
-
-            writer.WriteMultiline($$"""
-            var n = 0;
-            while({{atomName}}(src[i])) {
-                i += 1;
-                n += 1;
-            }            
-            // TODO: check for {{rep.Min}} <= i <= {{rep.Max?.ToString() ?? "∞"}} 
-            return {{check}}; 
-            """);
+            writer.WriteLine("var count = 0;");
+            writer.WriteLine($"while (pos < src.Length && ({atomCondition}))");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("pos += 1;");
+            writer.WriteLine("count += 1;");
+            writer.Indent--;
+            writer.WriteLine("}");
+            writer.WriteLine($"if (count < {rep.Min})");
+            writer.WriteLine("{");
+            writer.Indent++;
+            EmitFailure(writer);
+            writer.Indent--;
+            writer.WriteLine("}");
         }
-
-        writer.Indent--;
     }
 
-    private static string CompileAtom(Atom atom, ref int unique, IndentedTextWriter writer)
+    private static void EmitFailure(IndentedTextWriter writer)
+    {
+        writer.WriteLine("pos = i;");
+        writer.WriteLine("return false;");
+    }
+
+    private static string BuildAtomCondition(Atom atom, string charExpression)
     {
         switch (atom)
         {
             case CharClass c:
-                writer.Indent++;
-                writer.WriteLine();
-                var names = new List<string>();
-                foreach (var range in c.Ranges)
-                {
-                    var rName = CompileRange(range, ref unique, writer);
-                    names.Add(rName);
-                }
-
-                writer.WriteLine();
-                writer.WriteLine($"// CharClass: {(c.Negated ? "Negated " : "")} {c.Ranges}");
-                var name = $"IsInCharClass{unique++}";
-                writer.WriteMultiline($$"""
-                static bool {{name}}(char ch) => {{string.Join(" || ", names.Select(name => $"{name}(ch)"))}};
-                """);
-                writer.Indent--;
-                return name;
+                var rangeChecks = c.Ranges.Select(range => BuildRangeCondition(range, charExpression)).ToList();
+                var combined = rangeChecks.Count == 0 ? "false" : string.Join(" || ", rangeChecks);
+                return c.Negated ? $"!({combined})" : combined;
 
             case SingleChar c:
-                writer.WriteLine($"// SingleChar: '{c.value}' (escaped)");
-                return "IsSingleChar";
+                return $"{charExpression} == {FormatCharLiteral(c.value)}";
 
             default:
                 throw new NotImplementedException();
         }
     }
 
-    private static string CompileRange(CharRange range, ref int unique, IndentedTextWriter writer)
+    private static string BuildRangeCondition(CharRange range, string charExpression)
     {
-        writer.WriteLine();
-        writer.WriteLine($"// CharRange: {range}");
         if (range.Start == range.End)
         {
-            var name = $"IsChar{unique++}";
-            writer.WriteMultiline($$"""
-            static bool {{name}}(char ch ) => ch == '{{range.Start}}';
-            """);
-            return name;
+            return $"{charExpression} == {FormatCharLiteral(range.Start)}";
         }
-        else
+
+        return $"{charExpression} is >= {FormatCharLiteral(range.Start)} and <= {FormatCharLiteral(range.End)}";
+    }
+
+    private static string FormatCharLiteral(char value)
+    {
+        return value switch
         {
-            var name = $"IsInRange{unique++}";
-            writer.WriteLine($$"""
-            static bool {{name}}(char ch ) => ch is >= '{{range.Start}}' and <= '{{range.End}}';
-            """);
-            return name;
-        }
+            '\\' => "'\\\\'",
+            '\'' => "'\\\''",
+            '\0' => "'\\0'",
+            '\a' => "'\\a'",
+            '\b' => "'\\b'",
+            '\f' => "'\\f'",
+            '\n' => "'\\n'",
+            '\r' => "'\\r'",
+            '\t' => "'\\t'",
+            '\v' => "'\\v'",
+            _ when char.IsControl(value) => $"'\\u{(int)value:X4}'",
+            _ => $"'{value}'"
+        };
     }
 }

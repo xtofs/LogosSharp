@@ -9,9 +9,9 @@ static class Match
         if (success) { i += 3; }
         return success;
     }
-    // Token Ident: Regex  /[a-zA-Z_][a-zA-Z0-9_]*/ 
+    // Token Identifier: Regex  /[a-zA-Z_][a-zA-Z0-9_]*/ 
     //!! [a-zA-Z_][a-zA-Z0-9_]*   
-    public static bool Ident(ReadOnlySpan<char> src, ref int i)
+    public static bool Identifier(ReadOnlySpan<char> src, ref int i)
     {
 
 

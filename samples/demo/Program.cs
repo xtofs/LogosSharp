@@ -11,7 +11,7 @@ Compiler.Compile<TokenKind>(file);
 enum TokenKind
 {
     [Token("let")] Let,
-    [Regex("[a-zA-Z_][a-zA-Z0-9_]*")] Ident,
+    [Regex("[a-zA-Z_][a-zA-Z0-9_]*")] Identifier,
 
     [Regex("[0-9]+")] Number,
     [Token("=")] Equals,

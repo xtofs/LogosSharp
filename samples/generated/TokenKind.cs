@@ -1,7 +1,7 @@
 enum TokenKind
 {
     Let,
-    Ident,
+    Identifier,
     Number,
     Equals,
     Plus,

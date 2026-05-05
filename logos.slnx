@@ -3,4 +3,7 @@
     <Project Path="samples/demo/demo.csproj" />
     <Project Path="samples/generated/generated.csproj" />
   </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/spike/spike.csproj" />
+  </Folder>
 </Solution>
