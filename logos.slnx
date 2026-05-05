@@ -1,9 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <Solution>
-  <Folder Name="/samples/">
+    <Project Path="src/Logos/Logos.csproj" />
     <Project Path="samples/demo/demo.csproj" />
-    <Project Path="samples/generated/generated.csproj" />
-  </Folder>
-  <Folder Name="/src/">
-    <Project Path="src/spike/spike.csproj" />
-  </Folder>
 </Solution>

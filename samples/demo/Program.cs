@@ -1,24 +1,32 @@
 ﻿using Logos;
 
+var tokenizer = new TokenKindLogos.Tokenizer("let x = 42 + y");
 
-
-
-using var file = File.CreateText("output.txt");
-Compiler.Compile<TokenKind>(file);
-
+while (tokenizer.NextToken() is var token && token.Kind != TokenKind.End)
+{
+    Console.WriteLine($"{token.Kind}: '{token.Value.ToString()}'");
+}
 
 [Logos(Skip = "[ \\t\\r\\n]+")]
-enum TokenKind
+public enum TokenKind
 {
-    [Token("let")] Let,
-    [Regex("[a-zA-Z_][a-zA-Z0-9_]*")] Identifier,
+    [Token("let")] 
+    Let,
+    
+    [Regex("[a-zA-Z_][a-zA-Z0-9_]*")] 
+    Identifier,
+    
+    [Regex("[0-9]+")] 
+    Number,
+    
+    [Token("=")] 
+    Equals,
+    
+    [Token("+")] 
+    Plus,
+    
+    [Regex("""[^"]*""")] 
+    StringLiteral,
 
-    [Regex("[0-9]+")] Number,
-    [Token("=")] Equals,
-    [Token("+")] Plus,
-    [Regex("""[^"]*""")] StringLiteral,
-
-    End
-    // Whitespace,    
-    // End
+    End,
 }
