@@ -27,7 +27,7 @@ static class CharClassBuilder
     //     }
     // }
 
-    public static IReadOnlyDictionary<UInt128, (string, int)> CreateClasses(string[] patterns)
+    public static IReadOnlyDictionary<UInt128, (string Name, int Value)> CreateClasses(string[] patterns)
     {
         // charToClassesLookup = new int[127];
         var unique = 0;
@@ -111,19 +111,13 @@ static class CharClassBuilder
     };
 
 
-    // public static (string, string) AsciiCharsByCategory(UnicodeCategory category)
-    // {
-    //     var cats = string.Join("|", Enum.GetValues<UnicodeCategory>().Where(c => int.PopCount((int)c) == 1 && c.HasFlag(c)));
-    //     var chars = Enumerable.Range(32, 127 - 32).Select(i => (char)i).Where(c => (category & char.GetUnicodeCategory(c)) != 0).ToArray();
-    //     return (cats, new string(chars));
-    // }
-
     internal static object CharsFromSet(UInt128 set)
     {
         var len = set.PopCount();
 
         return string.Create(len, set, (span, value) =>
         {
+            span.Fill(' ');
             var idx = 0;
 
             while (value != UInt128.Zero)
