@@ -1,7 +1,8 @@
+namespace Logos;
+
 using System.Text;
 using System.CodeDom.Compiler;
 
-namespace Logos;
 
 internal sealed class CodeWriter
 {

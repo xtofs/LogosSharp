@@ -4,7 +4,10 @@ public class Program
 {
     public static void Main()
     {
-        var tokenizer = TokenKind.CreateTokenizer("Let x = 42 + y");
+        var input = """
+            Let x = 42 + y
+            """;
+        var tokenizer = TokenKind.CreateTokenizer(input);
 
         while (tokenizer.TryGetNext(out var token))
         {

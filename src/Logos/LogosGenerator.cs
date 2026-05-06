@@ -1,6 +1,5 @@
 namespace Logos;
 
-
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -212,12 +211,14 @@ public sealed class LogosGenerator : IIncrementalGenerator
         writer.Indent();
         writer.WriteLine("private readonly ReadOnlySpan<char> _src;");
         writer.WriteLine("private int _pos;");
+        writer.WriteLine("private bool _emittedEnd;");
         writer.WriteLine();
         writer.WriteLine($"public {model.TokenizerTypeName}(ReadOnlySpan<char> src)");
         writer.WriteLine("{");
         writer.Indent();
         writer.WriteLine("_src = src;");
         writer.WriteLine("_pos = 0;");
+        writer.WriteLine("_emittedEnd = false;");
         writer.Outdent();
         writer.WriteLine("}");
         writer.WriteLine();
@@ -234,8 +235,17 @@ public sealed class LogosGenerator : IIncrementalGenerator
         writer.WriteLine("if (_pos >= _src.Length)");
         writer.WriteLine("{");
         writer.Indent();
+        writer.WriteLine("if (_emittedEnd)");
+        writer.WriteLine("{");
+        writer.Indent();
         writer.WriteLine("token = default;");
         writer.WriteLine("return false;");
+        writer.Outdent();
+        writer.WriteLine("}");
+        writer.WriteLine();
+        writer.WriteLine("_emittedEnd = true;");
+        writer.WriteLine($"token = new {model.TokenTypeName}({model.EnumTypeName}.{model.EndMemberName}, ReadOnlySpan<char>.Empty, _pos);");
+        writer.WriteLine("return true;");
         writer.Outdent();
         writer.WriteLine("}");
         writer.WriteLine();
