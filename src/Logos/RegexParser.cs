@@ -3,7 +3,7 @@ namespace Logos;
 internal sealed class RegexParser
 {
     private readonly string _src;
-    
+
     private int _pos;
 
     public RegexParser(string src)

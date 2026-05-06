@@ -16,15 +16,8 @@ internal sealed class CodeWriter
         _writer = new IndentedTextWriter(_stringWriter, "    ");
     }
 
-    public void Indent()
-    {
-        _writer.Indent++;
-    }
 
-    public void Outdent()
-    {
-        _writer.Indent--;
-    }
+    public int Indent { get => _writer.Indent; set => _writer.Indent = value; }
 
     public void WriteLine(string text = "")
     {

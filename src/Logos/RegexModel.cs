@@ -1,18 +1,60 @@
+using System.Text;
+
 namespace Logos;
 
-internal sealed class RegexPattern
+internal sealed class RegexPattern(Repetition[] sequence)
 {
-    public RegexPattern(Repetition[] sequence)
-    {
-        Sequence = sequence ?? throw new ArgumentNullException(nameof(sequence));
-    }
-
-    public Repetition[] Sequence { get; }
+    public Repetition[] Sequence { get; } = sequence ?? throw new ArgumentNullException(nameof(sequence));
 
     public static RegexPattern Parse(string pattern)
     {
         var parser = new RegexParser(pattern);
         return parser.Parse();
+    }
+
+    public override string ToString()
+    {
+        var builder = new StringBuilder();
+        foreach (var repetition in Sequence)
+        {
+            if (builder.Length > 0)
+            {
+                builder.Append(' ');
+            }
+
+            builder.Append(repetition.Atom switch
+            {
+                SingleChar c => $"'{c.Value}'",
+                CharClass cc => $"[{(cc.Negated ? "^" : "")}{string.Join("", cc.Ranges.Select(r => r.Start == r.End ? r.Start.ToString() : $"{r.Start}-{r.End}"))}]",
+                _ => throw new InvalidOperationException("Unknown atom type.")
+            });
+
+            if (repetition.Min == 0 && repetition.Max == 1)
+            {
+                builder.Append('?');
+            }
+            else if (repetition.Min == 0 && repetition.Max == null)
+            {
+                builder.Append('*');
+            }
+            else if (repetition.Min == 1 && repetition.Max == null)
+            {
+                builder.Append('+');
+            }
+            else if (repetition.Min != 1 || repetition.Max != 1)
+            {
+                builder.Append('{');
+                builder.Append(repetition.Min);
+                if (repetition.Max != null)
+                {
+                    builder.Append(',');
+                    builder.Append(repetition.Max);
+                }
+                builder.Append('}');
+            }
+        }
+
+        return builder.ToString();
     }
 }
 

@@ -24,3 +24,11 @@ public sealed class TokenAttribute(string literal, bool ignoreCase = false) : At
 
     public bool IgnoreCase { get; } = ignoreCase;
 }
+
+[AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+public sealed class MatchAttribute(Type MatcherType, string MethodName) : Attribute
+{
+    public Type MatcherType { get; } = MatcherType ?? throw new ArgumentNullException(nameof(MatcherType));
+
+    public string MethodName { get; } = MethodName ?? throw new ArgumentNullException(nameof(MethodName));
+}

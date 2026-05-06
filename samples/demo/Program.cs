@@ -5,7 +5,8 @@ public class Program
     public static void Main()
     {
         var input = """
-            Let x = 42 + y
+            let x = 42 + y + "hello \"world\""
+            in x * 2
             """;
         var tokenizer = TokenKind.CreateTokenizer(input);
 
