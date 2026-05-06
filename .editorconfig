@@ -2,3 +2,6 @@
 
 # IDE0305: Simplify collection initialization
 dotnet_style_prefer_collection_expression = never
+
+# IDE0022: Use block body for method
+csharp_style_expression_bodied_methods = false
