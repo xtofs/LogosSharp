@@ -1,4 +1,5 @@
 using System.Text;
+using System.CodeDom.Compiler;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -315,42 +316,35 @@ public sealed class LogosGenerator : IIncrementalGenerator
             }
 
             writer.WriteLine();
-            writer.WriteLine("private readonly struct CharacterSet");
-            writer.WriteLine("{");
-            writer.Indent();
-            writer.WriteLine("private readonly ulong _lower;");
-            writer.WriteLine("private readonly ulong _upper;");
-            writer.WriteLine();
-            writer.WriteLine("public CharacterSet(ulong lower, ulong upper)");
-            writer.WriteLine("{");
-            writer.Indent();
-            writer.WriteLine("_lower = lower;");
-            writer.WriteLine("_upper = upper;");
-            writer.Outdent();
-            writer.WriteLine("}");
-            writer.WriteLine();
-            writer.WriteLine("public bool Contains(char value)");
-            writer.WriteLine("{");
-            writer.Indent();
-            writer.WriteLine("if (value < 64)");
-            writer.WriteLine("{");
-            writer.Indent();
-            writer.WriteLine("return (_lower & (1UL << value)) != 0;");
-            writer.Outdent();
-            writer.WriteLine("}");
-            writer.WriteLine();
-            writer.WriteLine("if (value >= 128)");
-            writer.WriteLine("{");
-            writer.Indent();
-            writer.WriteLine("return false;");
-            writer.Outdent();
-            writer.WriteLine("}");
-            writer.WriteLine();
-            writer.WriteLine("return (_upper & (1UL << (value - 64))) != 0;");
-            writer.Outdent();
-            writer.WriteLine("}");
-            writer.Outdent();
-            writer.WriteLine("}");
+            writer.WriteMultiLine(
+                """
+                private readonly struct CharacterSet
+                {
+                    private readonly ulong _lower;
+                    private readonly ulong _upper;
+
+                    public CharacterSet(ulong lower, ulong upper)
+                    {
+                        _lower = lower;
+                        _upper = upper;
+                    }
+
+                    public bool Contains(char value)
+                    {
+                        if (value < 64)
+                        {
+                            return (_lower & (1UL << value)) != 0;
+                        }
+
+                        if (value >= 128)
+                        {
+                            return false;
+                        }
+
+                        return (_upper & (1UL << (value - 64))) != 0;
+                    }
+                }
+                """);
             writer.WriteLine();
         }
 
@@ -593,32 +587,42 @@ public sealed class LogosGenerator : IIncrementalGenerator
     private sealed class CodeWriter
     {
         private readonly StringBuilder _builder = new();
-        private int _indent;
+        private readonly StringWriter _stringWriter;
+        private readonly IndentedTextWriter _writer;
+
+        public CodeWriter()
+        {
+            _stringWriter = new StringWriter(_builder);
+            _writer = new IndentedTextWriter(_stringWriter, "    ");
+        }
 
         public void Indent()
         {
-            _indent++;
+            _writer.Indent++;
         }
 
         public void Outdent()
         {
-            _indent--;
+            _writer.Indent--;
         }
 
         public void WriteLine(string text = "")
         {
-            if (text.Length == 0)
-            {
-                _builder.AppendLine();
-                return;
-            }
+            _writer.WriteLine(text);
+        }
 
-            _builder.Append(' ', _indent * 4);
-            _builder.AppendLine(text);
+        public void WriteMultiLine(string text)
+        {
+            using var reader = new StringReader(text);
+            while (reader.ReadLine() is { } line)
+            {
+                _writer.WriteLine(line);
+            }
         }
 
         public override string ToString()
         {
+            _writer.Flush();
             return _builder.ToString();
         }
     }
