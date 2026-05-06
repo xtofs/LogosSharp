@@ -1,0 +1,1 @@
+samples/demo/obj/Debug/net10.0/generated/Logos/Logos.LogosGenerator/TokenKindLogos.g.cs
