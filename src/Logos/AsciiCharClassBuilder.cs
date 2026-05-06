@@ -124,6 +124,18 @@ internal readonly struct AsciiCharSet : IEquatable<AsciiCharSet>
         _upper = upper;
     }
 
+    /// <Summary>
+    /// Parses a pattern like "a-zA-Z0-9" into an AsciiCharSet. 
+    /// Ranges are specified with a hyphen, and individual characters are also allowed.
+    /// For example, "a-zA-Z0-9" includes all lowercase letters, uppercase letters, and digits.
+    /// Similar to regex character class patterns, but only supports ASCII characters and does not support negation or intersection.
+    /// </Summary>
+    /// <Note> 
+    /// Similar to regex character class patterns, the dash '-' 
+    /// need to be i a specific position to be treated as a range operator. 
+    /// For example, "a-z" is a valid range, but "a-zA-Z-" would treat the 
+    /// last '-' as a literal character.
+    /// </Note>
     internal static AsciiCharSet FromPattern(string pattern)
     {
         var lower = 0UL;

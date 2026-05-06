@@ -311,19 +311,44 @@ public sealed class LogosGenerator : IIncrementalGenerator
         {
             foreach (var definition in definitions)
             {
-                writer.WriteLine($"private const ulong {definition.Name}_Lower = 0x{definition.Set.Lower:X}UL;");
-                writer.WriteLine($"private const ulong {definition.Name}_Upper = 0x{definition.Set.Upper:X}UL;");
+                writer.WriteLine($"private static readonly CharacterSet {definition.ConstantName} = new CharacterSet(0x{definition.Set.Lower:X}UL, 0x{definition.Set.Upper:X}UL);");
             }
 
             writer.WriteLine();
-            writer.WriteLine("private static bool CharInClass(char value, ulong lower, ulong upper)");
+            writer.WriteLine("private readonly struct CharacterSet");
+            writer.WriteLine("{");
+            writer.Indent();
+            writer.WriteLine("private readonly ulong _lower;");
+            writer.WriteLine("private readonly ulong _upper;");
+            writer.WriteLine();
+            writer.WriteLine("public CharacterSet(ulong lower, ulong upper)");
+            writer.WriteLine("{");
+            writer.Indent();
+            writer.WriteLine("_lower = lower;");
+            writer.WriteLine("_upper = upper;");
+            writer.Outdent();
+            writer.WriteLine("}");
+            writer.WriteLine();
+            writer.WriteLine("public bool Contains(char value)");
             writer.WriteLine("{");
             writer.Indent();
             writer.WriteLine("if (value < 64)");
+            writer.WriteLine("{");
             writer.Indent();
-            writer.WriteLine("return (lower & (1UL << value)) != 0;");
+            writer.WriteLine("return (_lower & (1UL << value)) != 0;");
             writer.Outdent();
-            writer.WriteLine("return (upper & (1UL << (value - 64))) != 0;");
+            writer.WriteLine("}");
+            writer.WriteLine();
+            writer.WriteLine("if (value >= 128)");
+            writer.WriteLine("{");
+            writer.Indent();
+            writer.WriteLine("return false;");
+            writer.Outdent();
+            writer.WriteLine("}");
+            writer.WriteLine();
+            writer.WriteLine("return (_upper & (1UL << (value - 64))) != 0;");
+            writer.Outdent();
+            writer.WriteLine("}");
             writer.Outdent();
             writer.WriteLine("}");
             writer.WriteLine();
@@ -477,7 +502,7 @@ public sealed class LogosGenerator : IIncrementalGenerator
         {
             if (charClasses.TryGetDefinition(charClass, out var definition) && definition is not null)
             {
-                var lookup = $"CharInClass(src[pos], {definition.Name}_Lower, {definition.Name}_Upper)";
+                var lookup = $"{definition.ConstantName}.Contains(src[pos])";
                 return charClass.Negated ? $"!{lookup}" : lookup;
             }
 
