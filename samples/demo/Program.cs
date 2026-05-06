@@ -1,32 +1,14 @@
-﻿using Logos;
+﻿namespace Demo;
 
-var tokenizer = new TokenKindLogos.Tokenizer("let x = 42 + y");
-
-while (tokenizer.NextToken() is var token && token.Kind != TokenKind.End)
+public class Program
 {
-    Console.WriteLine($"{token.Kind}: '{token.Value.ToString()}'");
-}
+    public static void Main()
+    {
+        var tokenizer = TokenKind.CreateTokenizer("Let x = 42 + y");
 
-[Logos(Skip = "[ \\t\\r\\n]+")]
-public enum TokenKind
-{
-    [Token("let")] 
-    Let,
-    
-    [Regex("[a-zA-Z_][a-zA-Z0-9_]*")] 
-    Identifier,
-    
-    [Regex("[0-9]+")] 
-    Number,
-    
-    [Token("=")] 
-    Equals,
-    
-    [Token("+")] 
-    Plus,
-    
-    [Regex("""[^"]*""")] 
-    StringLiteral,
-
-    End,
+        while (tokenizer.TryGetNext(out var token))
+        {
+            Console.WriteLine($"{token.Start,3} {token.Kind}: '{token.Value.ToString()}'");
+        }
+    }
 }

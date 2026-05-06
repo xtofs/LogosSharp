@@ -18,12 +18,9 @@ public sealed class RegexAttribute : Attribute
 }
 
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
-public sealed class TokenAttribute : Attribute
+public sealed class TokenAttribute(string literal, bool ignoreCase = false) : Attribute
 {
-    public TokenAttribute(string literal)
-    {
-        Literal = literal ?? throw new ArgumentNullException(nameof(literal));
-    }
+    public string Literal { get; } = literal ?? throw new ArgumentNullException(nameof(literal));
 
-    public string Literal { get; }
+    public bool IgnoreCase { get; } = ignoreCase;
 }

@@ -93,11 +93,16 @@ public sealed class LogosGenerator : IIncrementalGenerator
 
             if (tokenAttribute is not null)
             {
-                patterns.Add(new TokenPatternModel(member.Name, PatternKind.Literal, (string)tokenAttribute.ConstructorArguments[0].Value!));
+                var val = (string)tokenAttribute.ConstructorArguments[0].Value!;
+                var igc = (bool)tokenAttribute.ConstructorArguments[1].Value!;
+                var pat = new TokenPatternModel(member.Name, PatternKind.Literal, val, igc);
+                patterns.Add(pat);
             }
             else if (regexAttribute is not null)
             {
-                patterns.Add(new TokenPatternModel(member.Name, PatternKind.Regex, (string)regexAttribute.ConstructorArguments[0].Value!));
+                string patternString = (string)regexAttribute.ConstructorArguments[0].Value!;
+                var pat = new TokenPatternModel(member.Name, PatternKind.Regex, patternString, false);
+                patterns.Add(pat);
             }
         }
 
@@ -165,52 +170,49 @@ public sealed class LogosGenerator : IIncrementalGenerator
             writer.WriteLine($"namespace {model.Namespace};");
         }
 
-        writer.WriteLine();
-        writer.WriteLine($"public static class {model.GeneratedTypeName}");
-        writer.WriteLine("{");
-        writer.Indent();
-
         EmitToken(writer, model);
         writer.WriteLine();
         EmitTokenizer(writer, model);
         writer.WriteLine();
         EmitMatchClass(writer, model, charClasses, skipPattern);
-
-        writer.Outdent();
-        writer.WriteLine("}");
+        writer.WriteLine();
+        EmitExtensions(writer, model);
 
         return writer.ToString();
     }
 
     private static void EmitToken(CodeWriter writer, LogosEnumModel model)
     {
-        writer.WriteLine("public readonly ref struct Token");
+        writer.WriteLine($"public readonly ref struct {model.TokenTypeName}");
         writer.WriteLine("{");
         writer.Indent();
-        writer.WriteLine($"public Token({model.EnumTypeName} kind, ReadOnlySpan<char> value)");
+        writer.WriteLine($"public {model.TokenTypeName}({model.EnumTypeName} kind, ReadOnlySpan<char> value, int start)");
         writer.WriteLine("{");
         writer.Indent();
         writer.WriteLine("Kind = kind;");
         writer.WriteLine("Value = value;");
+        writer.WriteLine("Start = start;");
         writer.Outdent();
         writer.WriteLine("}");
         writer.WriteLine();
         writer.WriteLine($"public {model.EnumTypeName} Kind {{ get; }}");
         writer.WriteLine();
         writer.WriteLine("public ReadOnlySpan<char> Value { get; }");
+        writer.WriteLine();
+        writer.WriteLine("public int Start { get; }");
         writer.Outdent();
         writer.WriteLine("}");
     }
 
     private static void EmitTokenizer(CodeWriter writer, LogosEnumModel model)
     {
-        writer.WriteLine("public ref struct Tokenizer");
+        writer.WriteLine($"public ref struct {model.TokenizerTypeName}");
         writer.WriteLine("{");
         writer.Indent();
         writer.WriteLine("private readonly ReadOnlySpan<char> _src;");
         writer.WriteLine("private int _pos;");
         writer.WriteLine();
-        writer.WriteLine("public Tokenizer(ReadOnlySpan<char> src)");
+        writer.WriteLine($"public {model.TokenizerTypeName}(ReadOnlySpan<char> src)");
         writer.WriteLine("{");
         writer.Indent();
         writer.WriteLine("_src = src;");
@@ -218,7 +220,7 @@ public sealed class LogosGenerator : IIncrementalGenerator
         writer.Outdent();
         writer.WriteLine("}");
         writer.WriteLine();
-        writer.WriteLine("public Token NextToken()");
+        writer.WriteLine($"public bool TryGetNext(out {model.TokenTypeName} token)");
         writer.WriteLine("{");
         writer.Indent();
 
@@ -231,7 +233,8 @@ public sealed class LogosGenerator : IIncrementalGenerator
         writer.WriteLine("if (_pos >= _src.Length)");
         writer.WriteLine("{");
         writer.Indent();
-        writer.WriteLine($"return new Token({model.EnumTypeName}.{model.EndMemberName}, default);");
+        writer.WriteLine("token = default;");
+        writer.WriteLine("return false;");
         writer.Outdent();
         writer.WriteLine("}");
         writer.WriteLine();
@@ -239,10 +242,11 @@ public sealed class LogosGenerator : IIncrementalGenerator
 
         foreach (var pattern in model.Patterns)
         {
-            writer.WriteLine($"if (Match.{pattern.Name}(_src, ref _pos))");
+            writer.WriteLine($"if ({model.MatchTypeName}.{pattern.Name}(_src, ref _pos))");
             writer.WriteLine("{");
             writer.Indent();
-            writer.WriteLine($"return new Token({model.EnumTypeName}.{pattern.Name}, _src.Slice(start, _pos - start));");
+            writer.WriteLine($"token = new {model.TokenTypeName}({model.EnumTypeName}.{pattern.Name}, _src.Slice(start, _pos - start), start);");
+            writer.WriteLine("return true;");
             writer.Outdent();
             writer.WriteLine("}");
             writer.WriteLine();
@@ -262,7 +266,7 @@ public sealed class LogosGenerator : IIncrementalGenerator
             writer.WriteLine("{");
             writer.Indent();
             writer.WriteLine("var start = _pos;");
-            writer.WriteLine("if (!Match.Skip(_src, ref _pos) || _pos == start)");
+            writer.WriteLine($"if (!{model.MatchTypeName}.Skip(_src, ref _pos) || _pos == start)");
             writer.WriteLine("{");
             writer.Indent();
             writer.WriteLine("return;");
@@ -278,9 +282,27 @@ public sealed class LogosGenerator : IIncrementalGenerator
         writer.WriteLine("}");
     }
 
+    private static void EmitExtensions(CodeWriter writer, LogosEnumModel model)
+    {
+        writer.WriteLine($"public static class {model.ExtensionsTypeName}");
+        writer.WriteLine("{");
+        writer.Indent();
+        writer.WriteLine($"extension({model.EnumTypeName})");
+        writer.WriteLine("{");
+        writer.Indent();
+        writer.WriteLine($"public static {model.TokenizerTypeName} CreateTokenizer(ReadOnlySpan<char> source)");
+        writer.Indent();
+        writer.WriteLine($"=> new {model.TokenizerTypeName}(source);");
+        writer.Outdent();
+        writer.Outdent();
+        writer.WriteLine("}");
+        writer.Outdent();
+        writer.WriteLine("}");
+    }
+
     private static void EmitMatchClass(CodeWriter writer, LogosEnumModel model, AsciiCharClassBuilder charClasses, RegexPattern? skipPattern)
     {
-        writer.WriteLine("public static class Match");
+        writer.WriteLine($"public static class {model.MatchTypeName}");
         writer.WriteLine("{");
         writer.Indent();
 
@@ -289,32 +311,19 @@ public sealed class LogosGenerator : IIncrementalGenerator
         {
             foreach (var definition in definitions)
             {
-                writer.WriteLine($"private const ulong {definition.ConstantName} = 1UL << {definition.BitIndex};");
+                writer.WriteLine($"private const ulong {definition.Name}_Lower = 0x{definition.Set.Lower:X}UL;");
+                writer.WriteLine($"private const ulong {definition.Name}_Upper = 0x{definition.Set.Upper:X}UL;");
             }
 
             writer.WriteLine();
-            writer.WriteLine("private static readonly ulong[] s_charClassLookup = new ulong[]");
+            writer.WriteLine("private static bool CharInClass(char value, ulong lower, ulong upper)");
             writer.WriteLine("{");
             writer.Indent();
-            var lookup = charClasses.BuildLookup();
-            for (var index = 0; index < lookup.Length; index += 8)
-            {
-                var values = new List<string>(8);
-                for (var offset = 0; offset < 8 && index + offset < lookup.Length; offset++)
-                {
-                    values.Add($"{lookup[index + offset]}UL");
-                }
-
-                writer.WriteLine(string.Join(", ", values) + ",");
-            }
-
+            writer.WriteLine("if (value < 64)");
+            writer.Indent();
+            writer.WriteLine("return (lower & (1UL << value)) != 0;");
             writer.Outdent();
-            writer.WriteLine("};");
-            writer.WriteLine();
-            writer.WriteLine("private static bool HasCharClass(char value, ulong flag)");
-            writer.WriteLine("{");
-            writer.Indent();
-            writer.WriteLine("return value < s_charClassLookup.Length && (s_charClassLookup[value] & flag) != 0;");
+            writer.WriteLine("return (upper & (1UL << (value - 64))) != 0;");
             writer.Outdent();
             writer.WriteLine("}");
             writer.WriteLine();
@@ -330,7 +339,7 @@ public sealed class LogosGenerator : IIncrementalGenerator
         {
             if (pattern.Kind == PatternKind.Literal)
             {
-                EmitLiteral(writer, pattern.Name, pattern.Value);
+                EmitLiteral(writer, pattern.Name, pattern.Value, pattern.IgnoreCase);
             }
             else
             {
@@ -344,7 +353,7 @@ public sealed class LogosGenerator : IIncrementalGenerator
         writer.WriteLine("}");
     }
 
-    private static void EmitLiteral(CodeWriter writer, string name, string value)
+    private static void EmitLiteral(CodeWriter writer, string name, string value, bool ignoreCase)
     {
         writer.WriteLine($"public static bool {name}(ReadOnlySpan<char> src, ref int i)");
         writer.WriteLine("{");
@@ -358,27 +367,24 @@ public sealed class LogosGenerator : IIncrementalGenerator
             return;
         }
 
-        writer.WriteLine($"if (src.Length - i < {value.Length})");
+        var literalStr = FormatStringLiteral(value);
+        var comparisonStr = ignoreCase ? $", StringComparison.OrdinalIgnoreCase" : "";
+        writer.WriteLine($"if (src.Slice(i).StartsWith({literalStr}{comparisonStr}))");
         writer.WriteLine("{");
         writer.Indent();
-        writer.WriteLine("return false;");
-        writer.Outdent();
-        writer.WriteLine("}");
-
-        for (var index = 0; index < value.Length; index++)
-        {
-            writer.WriteLine($"if (src[i + {index}] != {FormatCharLiteral(value[index])})");
-            writer.WriteLine("{");
-            writer.Indent();
-            writer.WriteLine("return false;");
-            writer.Outdent();
-            writer.WriteLine("}");
-        }
-
         writer.WriteLine($"i += {value.Length};");
         writer.WriteLine("return true;");
         writer.Outdent();
         writer.WriteLine("}");
+        writer.WriteLine("return false;");
+        writer.Outdent();
+        writer.WriteLine("}");
+    }
+
+    private static string FormatStringLiteral(string value)
+    {
+        var escaped = value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        return $"\"{escaped}\"";
     }
 
     private static void EmitRegexPattern(CodeWriter writer, string name, RegexPattern pattern, AsciiCharClassBuilder charClasses)
@@ -471,7 +477,7 @@ public sealed class LogosGenerator : IIncrementalGenerator
         {
             if (charClasses.TryGetDefinition(charClass, out var definition) && definition is not null)
             {
-                var lookup = $"HasCharClass(src[pos], {definition.ConstantName})";
+                var lookup = $"CharInClass(src[pos], {definition.Name}_Lower, {definition.Name}_Upper)";
                 return charClass.Negated ? $"!{lookup}" : lookup;
             }
 
@@ -556,7 +562,7 @@ public sealed class LogosGenerator : IIncrementalGenerator
         }
 
         parts.Push(enumSymbol.Name);
-        return string.Join("_", parts) + "Logos";
+        return string.Join("_", parts);
     }
 
     private sealed class CodeWriter
@@ -635,6 +641,14 @@ public sealed class LogosGenerator : IIncrementalGenerator
 
         public string GeneratedTypeName { get; }
 
+        public string TokenTypeName => GeneratedTypeName + "Token";
+
+        public string TokenizerTypeName => GeneratedTypeName + "Tokenizer";
+
+        public string MatchTypeName => GeneratedTypeName + "Match";
+
+        public string ExtensionsTypeName => GeneratedTypeName + "Extensions";
+
         public string EnumTypeName { get; }
 
         public string EndMemberName { get; }
@@ -645,23 +659,18 @@ public sealed class LogosGenerator : IIncrementalGenerator
 
         public Location? Location { get; }
 
-        public string HintName => $"{GeneratedTypeName}.g.cs";
+        public string HintName => $"{GeneratedTypeName}Logos.g.cs";
     }
 
-    private sealed class TokenPatternModel
+    private sealed class TokenPatternModel(string name, LogosGenerator.PatternKind kind, string value, bool ignoreCase)
     {
-        public TokenPatternModel(string name, PatternKind kind, string value)
-        {
-            Name = name;
-            Kind = kind;
-            Value = value;
-        }
+        public string Name { get; } = name;
 
-        public string Name { get; }
+        public PatternKind Kind { get; } = kind;
 
-        public PatternKind Kind { get; }
+        public string Value { get; } = value;
 
-        public string Value { get; }
+        public bool IgnoreCase { get; } = ignoreCase;
     }
 
     private enum PatternKind

@@ -115,6 +115,9 @@ internal readonly struct AsciiCharSet : IEquatable<AsciiCharSet>
     private readonly ulong _lower;
     private readonly ulong _upper;
 
+    public ulong Lower => _lower;
+    public ulong Upper => _upper;
+
     private AsciiCharSet(ulong lower, ulong upper)
     {
         _lower = lower;
