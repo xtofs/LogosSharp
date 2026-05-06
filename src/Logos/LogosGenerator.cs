@@ -1,9 +1,9 @@
-using System.Text;
-using System.CodeDom.Compiler;
+namespace Logos;
+
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace Logos;
 
 [Generator]
 public sealed class LogosGenerator : IIncrementalGenerator
@@ -130,14 +130,14 @@ public sealed class LogosGenerator : IIncrementalGenerator
             : enumSymbol.ContainingNamespace.ToDisplayString();
 
         return GenerationInput.FromModel(new LogosEnumModel(
-            containingNamespace,
-            enumSymbol.Name,
-            BuildGeneratedTypeName(enumSymbol),
-            enumSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-            endMemberName,
-            skipPattern,
-            patterns.ToArray(),
-            enumSymbol.Locations.FirstOrDefault()));
+            @namespace: containingNamespace,
+            enumName: enumSymbol.Name,
+            generatedTypeName: BuildGeneratedTypeName(enumSymbol),
+            enumTypeName: enumSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            endMemberName: endMemberName,
+            skipPattern: skipPattern,
+            patterns: patterns.ToArray(),
+            location: enumSymbol.Locations.FirstOrDefault()));
     }
 
     private static string Emit(LogosEnumModel model)
@@ -582,49 +582,6 @@ public sealed class LogosGenerator : IIncrementalGenerator
 
         parts.Push(enumSymbol.Name);
         return string.Join("_", parts);
-    }
-
-    private sealed class CodeWriter
-    {
-        private readonly StringBuilder _builder = new();
-        private readonly StringWriter _stringWriter;
-        private readonly IndentedTextWriter _writer;
-
-        public CodeWriter()
-        {
-            _stringWriter = new StringWriter(_builder);
-            _writer = new IndentedTextWriter(_stringWriter, "    ");
-        }
-
-        public void Indent()
-        {
-            _writer.Indent++;
-        }
-
-        public void Outdent()
-        {
-            _writer.Indent--;
-        }
-
-        public void WriteLine(string text = "")
-        {
-            _writer.WriteLine(text);
-        }
-
-        public void WriteMultiLine(string text)
-        {
-            using var reader = new StringReader(text);
-            while (reader.ReadLine() is { } line)
-            {
-                _writer.WriteLine(line);
-            }
-        }
-
-        public override string ToString()
-        {
-            _writer.Flush();
-            return _builder.ToString();
-        }
     }
 
     private readonly struct GenerationInput
