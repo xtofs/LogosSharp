@@ -124,7 +124,7 @@ internal readonly struct AsciiCharSet : IEquatable<AsciiCharSet>
         _upper = upper;
     }
 
-    public static AsciiCharSet FromPattern(string pattern)
+    internal static AsciiCharSet FromPattern(string pattern)
     {
         var lower = 0UL;
         var upper = 0UL;
