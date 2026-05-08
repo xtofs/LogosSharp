@@ -1,7 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?>
+
 <Solution>
     <Project Path="src/Logos/Logos.csproj" />
     <Project Path="src/spike/spike.csproj" />
+    <Folder Name="/samples/" />
     <Project Path="samples/demo/demo.csproj" />
     <Project Path="samples/minilang/minilang.csproj" />
     <Project Path="samples/xml/xml.csproj" />

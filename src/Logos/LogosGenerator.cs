@@ -257,7 +257,11 @@ public sealed class LogosGenerator : IIncrementalGenerator
         writer.WriteLine("private int _pos;");
         writer.WriteLine("private bool _emittedEnd;");
         writer.WriteLine();
+        EmitMatcherSpecDefinition(writer, model);
+        writer.WriteLine();
         EmitDispatchConstants(writer, model, dispatchConstants);
+        writer.WriteLine();
+        EmitMatcherSpecs(writer, model, dispatchConstants);
         writer.WriteLine();
         EmitDispatchTable(writer, dispatchTable, dispatchConstants);
         writer.WriteLine();
@@ -305,28 +309,13 @@ public sealed class LogosGenerator : IIncrementalGenerator
         writer.WriteLine("for (var candidateIndex = 0; candidateIndex < candidates.Length; candidateIndex++)");
         writer.WriteLine("{");
         writer.Indent += 1;
-        writer.WriteLine("switch (candidates[candidateIndex])");
+        writer.WriteLine("var matcherId = candidates[candidateIndex];");
+        writer.WriteLine("if (TryMatchById(matcherId, _src, ref _pos))");
         writer.WriteLine("{");
         writer.Indent += 1;
-        for (var patternIndex = 0; patternIndex < model.Patterns.Length; patternIndex++)
-        {
-            var pattern = model.Patterns[patternIndex];
-            var invocation = BuildMatcherInvocation(pattern, model);
-            writer.WriteLine($"case {dispatchConstants[patternIndex]}:");
-            writer.Indent += 1;
-            writer.WriteLine($"if ({invocation}(_src, ref _pos))");
-            writer.WriteLine("{");
-            writer.Indent += 1;
-            writer.WriteLine($"token = new {model.TokenTypeName}({model.EnumTypeName}.{pattern.Name}, _src.Slice(start, _pos - start), start);");
-            writer.WriteLine("return true;");
-            writer.Indent -= 1;
-            writer.WriteLine("}");
-            writer.Indent -= 1;
-            writer.WriteLine("break;");
-        }
-
-        writer.WriteLine("default:");
-        writer.WriteLine("break;");
+        writer.WriteLine("var spec = Specs[matcherId];");
+        writer.WriteLine($"token = new {model.TokenTypeName}(spec.Kind, _src.Slice(start, _pos - start), start);");
+        writer.WriteLine("return true;");
         writer.Indent -= 1;
         writer.WriteLine("}");
         writer.Indent -= 1;
@@ -336,7 +325,18 @@ public sealed class LogosGenerator : IIncrementalGenerator
         writer.WriteLine("else");
         writer.WriteLine("{");
         writer.Indent += 1;
-        EmitPatternAttempts(writer, model, Enumerable.Range(0, model.Patterns.Length));
+        for (var patternIndex = 0; patternIndex < model.Patterns.Length; patternIndex++)
+        {
+            writer.WriteLine($"if (TryMatchById({dispatchConstants[patternIndex]}, _src, ref _pos))");
+            writer.WriteLine("{");
+            writer.Indent += 1;
+            writer.WriteLine($"var spec = Specs[{dispatchConstants[patternIndex]}];");
+            writer.WriteLine($"token = new {model.TokenTypeName}(spec.Kind, _src.Slice(start, _pos - start), start);");
+            writer.WriteLine("return true;");
+            writer.Indent -= 1;
+            writer.WriteLine("}");
+            writer.WriteLine();
+        }
         writer.Indent -= 1;
         writer.WriteLine("}");
         writer.WriteLine();
@@ -366,6 +366,9 @@ public sealed class LogosGenerator : IIncrementalGenerator
             writer.Indent -= 1;
             writer.WriteLine("}");
         }
+
+        writer.WriteLine();
+        EmitTryMatchById(writer, model, dispatchConstants);
 
         writer.Indent -= 1;
         writer.WriteLine("}");
@@ -439,6 +442,7 @@ public sealed class LogosGenerator : IIncrementalGenerator
     {
         writer.WriteMultiLine(
                         """
+                // Compact 128-char ASCII bitset used by generated regex/class checks.
                 private readonly struct CharacterSet
                 {
                     private readonly ulong _lower;
@@ -452,6 +456,7 @@ public sealed class LogosGenerator : IIncrementalGenerator
 
                     public bool Contains(char value)
                     {
+                        // Bits 0..63 live in _lower, bits 64..127 in _upper.
                         if (value < 64)
                         {
                             return (_lower & (1UL << value)) != 0;
@@ -544,14 +549,82 @@ public sealed class LogosGenerator : IIncrementalGenerator
 
     private static void EmitDispatchConstants(CodeWriter writer, LogosEnumModel model, string[] dispatchConstants)
     {
+        writer.WriteLine("// Stable matcher ids used by dispatch, specs, and TryMatchById.");
         for (var index = 0; index < model.Patterns.Length; index++)
         {
             writer.WriteLine($"private const int {dispatchConstants[index]} = {index};");
         }
     }
 
+    private static void EmitMatcherSpecDefinition(CodeWriter writer, LogosEnumModel model)
+    {
+        writer.WriteLine("// Associates a matcher id with its resulting token kind.");
+        writer.WriteLine("private readonly struct MatcherSpec");
+        writer.WriteLine("{");
+        writer.Indent += 1;
+        writer.WriteLine($"public MatcherSpec(int matcherId, {model.EnumTypeName} kind)");
+        writer.WriteLine("{");
+        writer.Indent += 1;
+        writer.WriteLine("MatcherId = matcherId;");
+        writer.WriteLine("Kind = kind;");
+        writer.Indent -= 1;
+        writer.WriteLine("}");
+        writer.WriteLine();
+        writer.WriteLine("public int MatcherId { get; }");
+        writer.WriteLine();
+        writer.WriteLine($"public {model.EnumTypeName} Kind {{ get; }}");
+        writer.Indent -= 1;
+        writer.WriteLine("}");
+    }
+
+    private static void EmitMatcherSpecs(CodeWriter writer, LogosEnumModel model, string[] dispatchConstants)
+    {
+        writer.WriteLine("// Indexed by matcher id. Lets TryGetNext map a successful matcher back to token kind.");
+        writer.WriteLine("private static readonly MatcherSpec[] Specs =");
+        writer.WriteLine("[");
+        writer.Indent += 1;
+        for (var index = 0; index < model.Patterns.Length; index++)
+        {
+            var pattern = model.Patterns[index];
+            writer.WriteLine($"new MatcherSpec({dispatchConstants[index]}, {model.EnumTypeName}.{pattern.Name}),");
+        }
+
+        writer.Indent -= 1;
+        writer.WriteLine("]; ");
+    }
+
+    private static void EmitTryMatchById(CodeWriter writer, LogosEnumModel model, string[] dispatchConstants)
+    {
+        writer.WriteLine("// Central matcher dispatcher used by both ASCII fast-path and non-ASCII fallback.");
+        writer.WriteLine("private static bool TryMatchById(int matcherId, ReadOnlySpan<char> src, ref int pos)");
+        writer.WriteLine("{");
+        writer.Indent += 1;
+        writer.WriteLine("switch (matcherId)");
+        writer.WriteLine("{");
+        writer.Indent += 1;
+        for (var patternIndex = 0; patternIndex < model.Patterns.Length; patternIndex++)
+        {
+            var pattern = model.Patterns[patternIndex];
+            var invocation = BuildMatcherInvocation(pattern, model);
+            writer.WriteLine($"case {dispatchConstants[patternIndex]}:");
+            writer.Indent += 1;
+            writer.WriteLine($"return {invocation}(src, ref pos);");
+            writer.Indent -= 1;
+        }
+
+        writer.WriteLine("default:");
+        writer.Indent += 1;
+        writer.WriteLine("return false;");
+        writer.Indent -= 1;
+        writer.Indent -= 1;
+        writer.WriteLine("}");
+        writer.Indent -= 1;
+        writer.WriteLine("}");
+    }
+
     private static void EmitDispatchTable(CodeWriter writer, int[][] dispatchTable, string[] dispatchConstants)
     {
+        writer.WriteLine("// ASCII dispatch table: first character -> ordered matcher ids to attempt.");
         writer.WriteLine("private static readonly int[][] Dispatch = new int[][]");
         writer.WriteLine("{");
         writer.Indent += 1;
@@ -727,23 +800,6 @@ public sealed class LogosGenerator : IIncrementalGenerator
         if (c < 128)
         {
             set.Add(c);
-        }
-    }
-
-    private static void EmitPatternAttempts(CodeWriter writer, LogosEnumModel model, IEnumerable<int> patternIndexes)
-    {
-        foreach (var index in patternIndexes)
-        {
-            var pattern = model.Patterns[index];
-            var invocation = BuildMatcherInvocation(pattern, model);
-            writer.WriteLine($"if ({invocation}(_src, ref _pos))");
-            writer.WriteLine("{");
-            writer.Indent += 1;
-            writer.WriteLine($"token = new {model.TokenTypeName}({model.EnumTypeName}.{pattern.Name}, _src.Slice(start, _pos - start), start);");
-            writer.WriteLine("return true;");
-            writer.Indent -= 1;
-            writer.WriteLine("}");
-            writer.WriteLine();
         }
     }
 
