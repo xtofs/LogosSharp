@@ -31,4 +31,6 @@ public sealed class MatchAttribute(Type MatcherType, string MethodName) : Attrib
     public Type MatcherType { get; } = MatcherType ?? throw new ArgumentNullException(nameof(MatcherType));
 
     public string MethodName { get; } = MethodName ?? throw new ArgumentNullException(nameof(MethodName));
+
+    public string? StartsWith { get; set; }
 }

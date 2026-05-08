@@ -35,28 +35,9 @@ internal sealed class AsciiCharClassBuilder
         return _definitions.TryGetValue(set, out definition);
     }
 
-    public ulong[] BuildLookup()
-    {
-        var values = new ulong[128];
-        foreach (var definition in Definitions)
-        {
-            foreach (var index in definition.Set.EnumerateCharacters())
-            {
-                values[index] |= definition.Flag;
-            }
-        }
-
-        return values;
-    }
-
     private void Register(CharClass charClass)
     {
         if (!AsciiCharSet.TryCreate(charClass, out var set))
-        {
-            return;
-        }
-
-        if (_definitions.ContainsKey(set))
         {
             return;
         }
@@ -71,7 +52,10 @@ internal sealed class AsciiCharClassBuilder
             ? wellKnownName
             : $"Class{bitIndex + 1}";
 
-        _definitions.Add(set, new AsciiCharClassDefinition(set, name, bitIndex));
+        if (!_definitions.ContainsKey(set))
+        {
+            _definitions.Add(set, new AsciiCharClassDefinition(set, name, bitIndex));
+        }
     }
 
     private static readonly Dictionary<AsciiCharSet, string> WellKnownSets = new()
@@ -105,8 +89,6 @@ internal sealed class AsciiCharClassDefinition(AsciiCharSet set, string name, in
 
     public int BitIndex { get; } = bitIndex;
 
-    public ulong Flag => 1UL << BitIndex;
-
     public string ConstantName => $"{Name}Class";
 }
 
@@ -124,18 +106,18 @@ internal readonly struct AsciiCharSet : IEquatable<AsciiCharSet>
         _upper = upper;
     }
 
-    /// <Summary>
+    /// <summary>
     /// Parses a pattern like "a-zA-Z0-9" into an AsciiCharSet. 
     /// Ranges are specified with a hyphen, and individual characters are also allowed.
     /// For example, "a-zA-Z0-9" includes all lowercase letters, uppercase letters, and digits.
     /// Similar to regex character class patterns, but only supports ASCII characters and does not support negation or intersection.
-    /// </Summary>
-    /// <Note> 
+    /// </summary>
+    /// <note>
     /// Similar to regex character class patterns, the dash '-' 
-    /// need to be i a specific position to be treated as a range operator. 
+    /// needs to be in a specific position to be treated as a range operator.
     /// For example, "a-z" is a valid range, but "a-zA-Z-" would treat the 
     /// last '-' as a literal character.
-    /// </Note>
+    /// </note>
     internal static AsciiCharSet FromPattern(string pattern)
     {
         var lower = 0UL;
@@ -180,25 +162,6 @@ internal readonly struct AsciiCharSet : IEquatable<AsciiCharSet>
 
         set = new AsciiCharSet(lower, upper);
         return true;
-    }
-
-    public IEnumerable<int> EnumerateCharacters()
-    {
-        for (var index = 0; index < 64; index++)
-        {
-            if (((_lower >> index) & 1UL) != 0)
-            {
-                yield return index;
-            }
-        }
-
-        for (var index = 0; index < 64; index++)
-        {
-            if (((_upper >> index) & 1UL) != 0)
-            {
-                yield return index + 64;
-            }
-        }
     }
 
     public bool Equals(AsciiCharSet other)

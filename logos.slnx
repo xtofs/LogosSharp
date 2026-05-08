@@ -3,4 +3,6 @@
     <Project Path="src/Logos/Logos.csproj" />
     <Project Path="src/spike/spike.csproj" />
     <Project Path="samples/demo/demo.csproj" />
+    <Project Path="samples/minilang/minilang.csproj" />
+    <Project Path="samples/xml/xml.csproj" />
 </Solution>

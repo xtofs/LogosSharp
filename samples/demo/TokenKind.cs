@@ -24,7 +24,7 @@ public enum TokenKind
     [Token("*")]
     Asterisk,
 
-    [Match(typeof(TokenKindEx), nameof(TokenKindEx.StringLiteral))]
+    [Match(typeof(TokenKindEx), nameof(TokenKindEx.StringLiteral), StartsWith = "\"")]
     StringLiteral,
 
     End,
